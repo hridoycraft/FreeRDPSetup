@@ -1,0 +1,58 @@
+name: Free RDP Tunnel by revWhiteShadow at magiskmodule.gitlab.io
+
+on: 
+  workflow_dispatch:
+
+jobs:
+  setup-rdp-tunnel:
+    runs-on: windows-latest
+
+    steps:
+    - name: Check out the repository
+      uses: actions/checkout@v2
+
+    - name: Download and Install Playit
+      run: |
+        $playitPath = "$env:USERPROFILE\playit.exe"
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile $playitPath
+        if (!(Test-Path $playitPath)) { 
+          Write-Error "Playit download failed!" 
+          exit 1 
+        }
+
+    - name: Enable Remote Desktop (RDP) and Sound
+      run: |
+        # Enable RDP
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+
+        # Enable Audio Redirection
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableAudio" -Value 0
+
+        # Start Windows Audio Service
+        Start-Service -Name "Audiosrv"
+        Set-Service -Name "Audiosrv" -StartupType Automatic
+
+    - name: Set RDP Password
+      run: |
+        $password = ConvertTo-SecureString -AsPlainText "Str0ngP@ssw0rd!" -Force
+        Set-LocalUser -Name "runneradmin" -Password $password
+
+    - name: Start Playit and Set Up RDP Tunnel
+      env:
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+      run: |
+        $playitPath = "$env:USERPROFILE\playit.exe"
+        if (!(Test-Path $playitPath)) { 
+          Write-Error "Playit executable not found!" 
+          exit 1 
+        }
+        Start-Process -FilePath $playitPath -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
+        Start-Process -FilePath $playitPath -NoNewWindow
+
+    - name: Keep the GitHub Action Runner Alive
+      run: |
+        while ($true) {
+          Start-Sleep -Seconds 300
+        }
